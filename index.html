@@ -1,0 +1,492 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>cookedculator - 완벽한 공학용 계산기</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+    body { display: flex; flex-direction: column; justify-content: center; align-items: center; min-height: 100vh; background-color: #121318; color: #fff; padding: 20px; }
+    
+    .container { display: flex; flex-wrap: wrap; gap: 20px; justify-content: center; max-width: 950px; width: 100%; }
+    
+    .calculator { width: 410px; background-color: #1f222a; border-radius: 20px; padding: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.6); border: 1px solid #2d323e; }
+    
+    .display { width: 100%; min-height: 120px; background-color: #282c37; border-radius: 12px; margin-bottom: 15px; display: flex; flex-direction: column; justify-content: space-between; padding: 12px 15px; word-break: break-all; border: 1px solid #363b4a; }
+    .display-header { display: flex; justify-content: space-between; align-items: center; width: 100%; margin-bottom: 5px; }
+    .indicators { display: flex; gap: 6px; }
+    .mode-indicator, .shift-indicator { font-size: 11px; font-weight: bold; border-radius: 4px; padding: 2px 6px; }
+    .mode-indicator { color: #26e7a6; background-color: #1f222a; }
+    .shift-indicator { color: #f39c12; background-color: #1f222a; display: none; }
+    .display .expression { font-size: 14px; color: #9da3b4; text-align: right; min-height: 20px; }
+    .display .result { font-size: 26px; color: #ffffff; font-weight: bold; text-align: right; }
+    
+    .integral-panel { display: none; background-color: #1f222a; border: 1px solid #3a3f50; padding: 12px; border-radius: 8px; margin-bottom: 8px; flex-direction: row; align-items: center; gap: 10px; }
+    .integral-symbol-group { display: flex; flex-direction: column; align-items: center; justify-content: center; position: relative; }
+    .integral-symbol { font-size: 32px; line-height: 1; color: #3498db; font-family: serif; }
+    .integral-input { background: #282c37; border: 1px solid #454c5e; color: #26e7a6; text-align: center; border-radius: 4px; padding: 4px 6px; font-size: 12px; outline: none; }
+    .integral-input:focus { border-color: #26e7a6; box-shadow: 0 0 5px rgba(38, 231, 166, 0.5); }
+    .input-upper { width: 65px; margin-bottom: 2px; }
+    .input-lower { width: 65px; margin-top: 2px; }
+    .input-fx { flex: 1; height: 36px; text-align: left; font-size: 14px; padding-left: 8px; }
+
+    .buttons { display: grid; grid-template-columns: repeat(5, 1fr); gap: 7px; }
+    button { height: 44px; border: none; border-radius: 8px; font-size: 13px; font-weight: bold; cursor: pointer; background-color: #282c37; color: #ffffff; transition: 0.1s; border: 1px solid #323745; }
+    button:active { transform: scale(0.96); }
+    button:hover { background-color: #353b4a; }
+    button.shift-btn { background-color: #f39c12; border-color: #e67e22; }
+    button.mode-btn, button.operator { background-color: #e74c3c; border-color: #c0392b; }
+    button.equal-btn { background-color: #27ae60; border-color: #219653; color: #fff; }
+    button.func, button.clear { color: #26e7a6; }
+    button.solve-btn { background-color: #8e44ad; border-color: #7d3c98; color: #fff; }
+    button.graph-btn { background-color: #2980b9; border-color: #2471a3; color: #fff; }
+    
+    .panel { width: 410px; display: flex; flex-direction: column; gap: 15px; }
+    .history-container, .graph-container { background-color: #1f222a; border-radius: 20px; padding: 15px; box-shadow: 0 10px 30px rgba(0,0,0,0.6); border: 1px solid #2d323e; }
+    .history-title { font-size: 14px; font-weight: bold; color: #26e7a6; margin-bottom: 8px; display: flex; justify-content: space-between; }
+    .history-list { max-height: 120px; overflow-y: auto; display: flex; flex-direction: column; gap: 5px; }
+    .history-item { font-size: 12px; color: #aaa; background-color: #282c37; padding: 6px 10px; border-radius: 6px; cursor: pointer; text-align: right; }
+    .history-item:hover { color: #fff; background-color: #353b4a; }
+    
+    canvas { background-color: #282c37; border-radius: 10px; }
+  </style>
+</head>
+<body>
+
+<div class="container">
+  <div class="calculator">
+    <div class="display">
+      <div class="display-header">
+        <div class="indicators">
+          <span class="mode-indicator" id="mode-indicator">DEG</span>
+          <span class="shift-indicator" id="shift-indicator">2nd</span>
+        </div>
+        <div class="expression" id="expression"></div>
+      </div>
+
+      <div class="integral-panel" id="integral-ui">
+        <div class="integral-symbol-group">
+          <input type="text" class="integral-input input-upper" id="int-upper" placeholder="상한 (pi)">
+          <span class="integral-symbol">∫</span>
+          <input type="text" class="integral-input input-lower" id="int-lower" placeholder="하한 (0)">
+        </div>
+        <input type="text" class="integral-input input-fx" id="int-fx" placeholder="피적분식 ex: sin(x)">
+        <span style="font-size:14px; font-weight:bold; color:#aaa;">dx</span>
+        <span style="cursor:pointer; color:#e74c3c; margin-left:auto; font-weight:bold;" onclick="closeIntegralUI()">✕</span>
+      </div>
+
+      <div class="result" id="result">0</div>
+    </div>
+
+    <div class="buttons">
+      <button class="shift-btn" onclick="toggleShift()" id="shift-btn">2nd</button>
+      <button class="mode-btn" onclick="toggleAngleMode()" id="mode-toggle-btn">DEG</button>
+      <button class="clear" onclick="clearDisplay()">C</button>
+      <button class="operator" onclick="deleteLast()">⌫</button>
+      <button class="operator" onclick="appendCharacter('/')">÷</button>
+
+      <button class="func" onclick="handleTrigInput('sin')" id="btn-sin">sin</button>
+      <button class="func" onclick="handleTrigInput('cos')" id="btn-cos">cos</button>
+      <button class="func" onclick="handleTrigInput('tan')" id="btn-tan">tan</button>
+      <button class="func" onclick="appendCharacter('(')">(</button>
+      <button class="func" onclick="appendCharacter(')')">)</button>
+
+      <button class="func" onclick="appendCharacter('√(')">√</button>
+      <button class="func" onclick="appendCharacter('log(')">log</button>
+      <button class="func" onclick="appendCharacter('ln(')">ln</button>
+      <button class="func" onclick="appendCharacter('^')">x^y</button>
+      <button class="operator" onclick="appendCharacter('*')">×</button>
+
+      <button class="func" onclick="appendCharacter('abs(')">abs</button>
+      <button class="func" onclick="appendCharacter('e')">e</button>
+      <button class="func" onclick="appendCharacter('E')">EXP</button>
+      <button class="func" onclick="appendCharacter('Ans')">Ans</button>
+      <button class="operator" onclick="appendCharacter('-')">-</button>
+
+      <button class="solve-btn" onclick="openIntegralUI()">∫ 적분</button>
+      <button class="solve-btn" onclick="runSolve()">SOLVE</button>
+      <button class="func" onclick="appendCharacter('=')">=</button>
+      <button class="func" onclick="appendCharacter('x')">x</button>
+      <button class="operator" onclick="appendCharacter('+')">+</button>
+
+      <button onclick="appendCharacter('7')">7</button>
+      <button onclick="appendCharacter('8')">8</button>
+      <button onclick="appendCharacter('9')">9</button>
+      <button class="func" onclick="appendCharacter('π')">π</button>
+      <button class="graph-btn" onclick="drawGraph()">그래프</button>
+
+      <button onclick="appendCharacter('4')">4</button>
+      <button onclick="appendCharacter('5')">5</button>
+      <button onclick="appendCharacter('6')">6</button>
+      <button onclick="appendCharacter('1')">1</button>
+      <button onclick="appendCharacter('2')">2</button>
+
+      <button onclick="appendCharacter('3')">3</button>
+      <button onclick="appendCharacter('0')">0</button>
+      <button onclick="appendCharacter('.')">.</button>
+      <button class="equal-btn" onclick="calculate()" style="grid-column: span 2; height: 44px;">EXE (=)</button>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="history-container">
+      <div class="history-title">
+        <span>기억 기록 (History)</span>
+        <span style="cursor:pointer; color:#e74c3c; font-size:11px;" onclick="clearHistory()">기록 삭제</span>
+      </div>
+      <div class="history-list" id="history-list"></div>
+    </div>
+
+    <div class="graph-container">
+      <canvas id="graphCanvas"></canvas>
+    </div>
+  </div>
+</div>
+
+<script>
+  const resultDisplay = document.getElementById('result');
+  const expressionDisplay = document.getElementById('expression');
+  const modeIndicator = document.getElementById('mode-indicator');
+  const shiftIndicator = document.getElementById('shift-indicator');
+  const shiftBtn = document.getElementById('shift-btn');
+  const modeToggleBtn = document.getElementById('mode-toggle-btn');
+  const historyList = document.getElementById('history-list');
+  const integralUI = document.getElementById('integral-ui');
+  const intLower = document.getElementById('int-lower');
+  const intUpper = document.getElementById('int-upper');
+  const intFx = document.getElementById('int-fx');
+  
+  const btnSin = document.getElementById('btn-sin');
+  const btnCos = document.getElementById('btn-cos');
+  const btnTan = document.getElementById('btn-tan');
+
+  let currentInput = '';
+  let lastAnswer = '0';
+  let isDegree = true;
+  let isShift = false;
+  let isIntegralMode = false;
+  let activeInput = intFx;
+  let chartInstance = null;
+
+  [intLower, intUpper, intFx].forEach(inputEl => {
+    inputEl.addEventListener('focus', () => { activeInput = inputEl; });
+  });
+
+  window.addEventListener('keydown', (e) => {
+    if (document.activeElement.tagName === 'INPUT') return;
+
+    if ((e.key >= '0' && e.key <= '9') || e.key === '.' || e.key === '+' || e.key === '-' || e.key === '*' || e.key === '/' || e.key === '(' || e.key === ')' || e.key === 'x' || e.key === '=') {
+      appendCharacter(e.key);
+    } else if (e.key === 'Enter') {
+      calculate();
+    } else if (e.key === 'Backspace') {
+      deleteLast();
+    } else if (e.key === 'Escape') {
+      clearDisplay();
+    }
+  });
+
+  function openIntegralUI() {
+    isIntegralMode = true;
+    integralUI.style.display = 'flex';
+    setTimeout(() => intFx.focus(), 50);
+  }
+
+  function closeIntegralUI() {
+    isIntegralMode = false;
+    integralUI.style.display = 'none';
+    intLower.value = '';
+    intUpper.value = '';
+    intFx.value = '';
+  }
+
+  function toggleAngleMode() {
+    isDegree = !isDegree;
+    modeIndicator.innerText = isDegree ? 'DEG' : 'RAD';
+    modeToggleBtn.innerText = isDegree ? 'DEG' : 'RAD';
+  }
+
+  function toggleShift() {
+    isShift = !isShift;
+    if (isShift) {
+      shiftIndicator.style.display = 'inline-block';
+      shiftBtn.style.backgroundColor = '#d35400';
+      btnSin.innerText = 'asin';
+      btnCos.innerText = 'acos';
+      btnTan.innerText = 'atan';
+    } else {
+      shiftIndicator.style.display = 'none';
+      shiftBtn.style.backgroundColor = '#f39c12';
+      btnSin.innerText = 'sin';
+      btnCos.innerText = 'cos';
+      btnTan.innerText = 'tan';
+    }
+  }
+
+  function handleTrigInput(type) {
+    if (isShift) {
+      appendCharacter('a' + type + '(');
+      toggleShift();
+    } else {
+      appendCharacter(type + '(');
+    }
+  }
+
+  function appendCharacter(char) {
+    if (isIntegralMode) {
+      const target = activeInput || intFx;
+      const start = target.selectionStart || target.value.length;
+      const end = target.selectionEnd || target.value.length;
+      target.value = target.value.substring(0, start) + char + target.value.substring(end);
+      target.focus();
+      target.setSelectionRange(start + char.length, start + char.length);
+      return;
+    }
+
+    if (resultDisplay.innerText === '0' && !isNaN(char) && !currentInput.includes('=')) {
+      currentInput = char;
+    } else {
+      currentInput += char;
+    }
+    updateDisplay();
+  }
+
+  function clearDisplay() { 
+    currentInput = ''; 
+    expressionDisplay.innerText = ''; 
+    resultDisplay.innerText = '0';
+    closeIntegralUI();
+  }
+  
+  function deleteLast() {
+    if (isIntegralMode) {
+      const target = activeInput || intFx;
+      const start = target.selectionStart;
+      const end = target.selectionEnd;
+      if (start > 0 || start !== end) {
+        if (start === end) {
+          target.value = target.value.substring(0, start - 1) + target.value.substring(end);
+          target.setSelectionRange(start - 1, start - 1);
+        } else {
+          target.value = target.value.substring(0, start) + target.value.substring(end);
+          target.setSelectionRange(start, start);
+        }
+      }
+      target.focus();
+      return;
+    }
+
+    currentInput = currentInput.slice(0, -1);
+    updateDisplay();
+  }
+
+  function updateDisplay() { resultDisplay.innerText = currentInput === '' ? '0' : currentInput; }
+
+  function mySin(x) { return Math.sin(isDegree ? (x * Math.PI / 180) : x); }
+  function myCos(x) { return Math.cos(isDegree ? (x * Math.PI / 180) : x); }
+  function myTan(x) { return Math.tan(isDegree ? (x * Math.PI / 180) : x); }
+  function myAsin(x) { const r = Math.asin(x); return isDegree ? (r * 180 / Math.PI) : r; }
+  function myAcos(x) { const r = Math.acos(x); return isDegree ? (r * 180 / Math.PI) : r; }
+  function myAtan(x) { const r = Math.atan(x); return isDegree ? (r * 180 / Math.PI) : r; }
+
+  // 입력된 일반 수식을 숫자로 안전하게 계산
+  function evalValue(strVal) {
+    if (!strVal || strVal.trim() === '') return NaN;
+    const parsed = parseExpression(strVal);
+    const fn = new Function('mySin', 'myCos', 'myTan', 'myAsin', 'myAcos', 'myAtan', `return ${parsed};`);
+    return fn(mySin, myCos, myTan, myAsin, myAcos, myAtan);
+  }
+
+  function myIntegrate(exprStr, a, b) {
+    const n = 1000;
+    const h = (b - a) / n;
+    const evalAt = (x) => {
+      const parsed = parseExpression(exprStr, x);
+      const fn = new Function('mySin', 'myCos', 'myTan', 'myAsin', 'myAcos', 'myAtan', `return ${parsed};`);
+      return fn(mySin, myCos, myTan, myAsin, myAcos, myAtan);
+    };
+
+    let sum = evalAt(a) + evalAt(b);
+    for (let i = 1; i < n; i++) {
+      const x = a + i * h;
+      sum += (i % 2 === 0 ? 2 : 4) * evalAt(x);
+    }
+    return (h / 3) * sum;
+  }
+
+  function runSolve() {
+    try {
+      let targetExpr = currentInput;
+      if (!targetExpr.includes('=')) {
+        targetExpr += '=0';
+      }
+
+      const parts = targetExpr.split('=');
+      const lhs = parts[0];
+      const rhs = parts[1] || '0';
+
+      const evalAt = (x) => {
+        const pL = parseExpression(lhs, x);
+        const pR = parseExpression(rhs, x);
+        const fnL = new Function('mySin', 'myCos', 'myTan', 'myAsin', 'myAcos', 'myAtan', `return ${pL};`);
+        const fnR = new Function('mySin', 'myCos', 'myTan', 'myAsin', 'myAcos', 'myAtan', `return ${pR};`);
+        return fnL(mySin, myCos, myTan, myAsin, myAcos, myAtan) - fnR(mySin, myCos, myTan, myAsin, myAcos, myAtan);
+      };
+
+      let x = 0;
+      for (let i = 0; i < 100; i++) {
+        let fx = evalAt(x);
+        if (Math.abs(fx) < 1e-7) break;
+        let dfx = (evalAt(x + 1e-5) - fx) / 1e-5;
+        if (Math.abs(dfx) < 1e-12) break;
+        let nextX = x - fx / dfx;
+        if (Math.abs(nextX - x) < 1e-7) { x = nextX; break; }
+        x = nextX;
+      }
+
+      const finalRes = Number(x.toFixed(8));
+      expressionDisplay.innerText = `SOLVE: ${currentInput}`;
+      resultDisplay.innerText = `x = ${finalRes}`;
+      addHistory(`SOLVE(${currentInput})`, `x = ${finalRes}`);
+      lastAnswer = finalRes;
+      currentInput = String(finalRes);
+    } catch (e) {
+      resultDisplay.innerText = 'SOLVE 오류';
+    }
+  }
+
+  function parseExpression(inputStr, xVal = null) {
+    let expr = inputStr;
+
+    expr = expr.replace(/pi/g, 'π');
+    expr = expr.replace(/Ans/g, `(${lastAnswer})`);
+
+    // 암묵적 곱셈 수식 변환
+    expr = expr.replace(/([0-9.]+)\s*([a-zA-Zπe\(])/g, '$1*$2')
+               .replace(/([πe])\s*([a-zA-Z0-9.\(])/g, '$1*$2')
+               .replace(/([x])\s*([0-9.πe\(])/g, '$1*$2')
+               .replace(/(\))\s*([0-9.a-zA-Zπe\(])/g, '$1*$2');
+
+    if (xVal !== null) {
+      expr = expr.replace(/x/g, `(${xVal})`);
+    }
+
+    expr = expr.replace(/asin\(/g, 'TEMP_ASIN(')
+               .replace(/acos\(/g, 'TEMP_ACOS(')
+               .replace(/atan\(/g, 'TEMP_ATAN(');
+               
+    expr = expr.replace(/sin\(/g, 'mySin(')
+               .replace(/cos\(/g, 'myCos(')
+               .replace(/tan\(/g, 'myTan(');
+               
+    expr = expr.replace(/TEMP_ASIN\(/g, 'myAsin(')
+               .replace(/TEMP_ACOS\(/g, 'myAcos(')
+               .replace(/TEMP_ATAN\(/g, 'myAtan(');
+
+    expr = expr.replace(/([0-9.]+)E([+-]?[0-9.]+)/g, '($1*10**$2)');
+
+    expr = expr.replace(/abs\(/g, 'Math.abs(')
+               .replace(/×/g, '*')
+               .replace(/÷/g, '/')
+               .replace(/π/g, 'Math.PI')
+               .replace(/e/g, 'Math.E')
+               .replace(/√\(/g, 'Math.sqrt(')
+               .replace(/√([0-9.]+)/g, 'Math.sqrt($1)')
+               .replace(/log\(/g, 'Math.log10(')
+               .replace(/ln\(/g, 'Math.log(')
+               .replace(/\^/g, '**');
+
+    const open = (expr.match(/\(/g) || []).length;
+    const close = (expr.match(/\)/g) || []).length;
+    if (open > close) expr += ')'.repeat(open - close);
+
+    return expr;
+  }
+
+  function calculate() {
+    try {
+      let result;
+
+      if (isIntegralMode) {
+        // 하한/상한에 pi, sin(90) 같은 수식이 와도 계산하도록 처리
+        const a = evalValue(intLower.value);
+        const b = evalValue(intUpper.value);
+        const fxStr = intFx.value;
+
+        if (isNaN(a) || isNaN(b) || !fxStr) throw new Error();
+        result = myIntegrate(fxStr, a, b);
+        expressionDisplay.innerText = `∫[${intLower.value}~${intUpper.value}] (${fxStr}) dx`;
+      } else {
+        if (currentInput.includes('=')) {
+          runSolve();
+          return;
+        }
+        expressionDisplay.innerText = currentInput;
+        const parsed = parseExpression(currentInput);
+        const calcFn = new Function('mySin', 'myCos', 'myTan', 'myAsin', 'myAcos', 'myAtan', `return ${parsed};`);
+        result = calcFn(mySin, myCos, myTan, myAsin, myAcos, myAtan);
+      }
+
+      if (typeof result === 'number') result = Number(result.toFixed(8));
+
+      if (isNaN(result) || !isFinite(result)) {
+        resultDisplay.innerText = '오류';
+      } else {
+        resultDisplay.innerText = result;
+        addHistory(expressionDisplay.innerText, result);
+        lastAnswer = result;
+        currentInput = String(result);
+      }
+    } catch (e) {
+      resultDisplay.innerText = '오류';
+      currentInput = '';
+    }
+  }
+
+  function addHistory(expr, res) {
+    const item = document.createElement('div');
+    item.className = 'history-item';
+    item.innerText = `${expr} = ${res}`;
+    item.onclick = () => { currentInput = expr; updateDisplay(); };
+    historyList.prepend(item);
+  }
+
+  function clearHistory() { historyList.innerHTML = ''; }
+
+  function drawGraph() {
+    let graphTarget = isIntegralMode ? intFx.value : currentInput;
+    if (!graphTarget) return;
+
+    const xVals = [], yVals = [];
+    for (let x = -10; x <= 10; x += 0.2) {
+      try {
+        const parsed = parseExpression(graphTarget, x);
+        const calcFn = new Function('mySin', 'myCos', 'myTan', 'myAsin', 'myAcos', 'myAtan', `return ${parsed};`);
+        let y = calcFn(mySin, myCos, myTan, myAsin, myAcos, myAtan);
+        xVals.push(x.toFixed(1));
+        yVals.push((isNaN(y) || !isFinite(y)) ? null : y);
+      } catch {
+        xVals.push(x.toFixed(1));
+        yVals.push(null);
+      }
+    }
+    const ctx = document.getElementById('graphCanvas').getContext('2d');
+    if (chartInstance) chartInstance.destroy();
+    chartInstance = new Chart(ctx, {
+      type: 'line',
+      data: { labels: xVals, datasets: [{ label: `f(x) = ${graphTarget}`, data: yVals, borderColor: '#26e7a6', borderWidth: 2, fill: false, pointRadius: 0 }] },
+      options: { 
+        responsive: true, 
+        scales: { 
+          x: { grid: { color: '#3d4351' }, ticks: { color: '#888' } }, 
+          y: { grid: { color: '#3d4351' }, ticks: { color: '#888' } } 
+        }, 
+        plugins: { legend: { labels: { color: '#ffffff' } } } 
+      }
+    });
+  }
+</script>
+
+</body>
+</html>
